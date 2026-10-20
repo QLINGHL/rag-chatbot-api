@@ -1,0 +1,16 @@
+Northwind Traders - Customer Support Handbook
+
+Refunds and Returns
+Customers may request a full refund within 30 days of purchase for any unused product in its original packaging. Annual plan subscribers have an extended window: they can request a refund within 45 days of the subscription start date. Refunds are issued to the original payment method within 5 business days of approval.
+
+Support Hours
+Our support team is available Monday to Friday, from 9:00 to 18:00 CET. Premium plan customers get extended support hours, from 8:00 to 22:00 CET, seven days a week. The emergency hotline for enterprise customers operates 24 hours a day.
+
+Shipping
+Standard shipping takes 3 to 5 business days within Europe and 7 to 10 business days for international orders. Express shipping is available at checkout and takes 1 to 2 business days. Orders over 75 euros qualify for free standard shipping.
+
+Warranty
+All hardware products include a 2-year warranty that covers manufacturing defects. The warranty does not cover accidental damage or water damage. Customers can extend the warranty to 4 years by purchasing the Northwind Care plan within 60 days of purchase.
+
+Account Security
+Passwords must be at least 12 characters long and include one number and one symbol. Two-factor authentication is mandatory for all admin accounts. Login sessions expire after 30 minutes of inactivity.
