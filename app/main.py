@@ -2,8 +2,9 @@
 
 Multi-tenant retrieval-augmented generation over uploaded text documents:
 
-* POST /tenants/{tenant_id}/documents - upload a .txt/.md file; it is chunked,
-  embedded and stored in that tenant's own Qdrant collection.
+* POST /tenants/{tenant_id}/documents - upload a .txt/.md/.pdf file; its
+  text is extracted, chunked, embedded and stored in that tenant's own
+  Qdrant collection.
 * POST /tenants/{tenant_id}/chat      - ask a question; the top-k chunks from
   the tenant's collection are retrieved and used to build the LLM prompt.
 * GET  /tenants/{tenant_id}/stats     - chunk count for a tenant.
@@ -20,6 +21,7 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
 from .config import settings
+from .documents import extract_text, is_supported
 from .embeddings import get_embedder
 from .rag import RagStore, validate_tenant_id
 
@@ -29,7 +31,11 @@ app = FastAPI(
     version="1.0.0",
 )
 
-store = RagStore(qdrant_path=settings.qdrant_path, embedder=get_embedder(settings))
+store = RagStore(
+    embedder=get_embedder(settings),
+    qdrant_url=settings.qdrant_url,
+    qdrant_path=settings.qdrant_path,
+)
 
 
 class ChatRequest(BaseModel):
@@ -105,15 +111,15 @@ async def upload_document(tenant_id: str, file: UploadFile = File(...)):
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     filename = file.filename or ""
-    if not filename.lower().endswith((".txt", ".md")):
+    if not is_supported(filename):
         raise HTTPException(
-            status_code=400, detail="Only .txt and .md files are supported."
+            status_code=400, detail="Only .txt, .md and .pdf files are supported."
         )
     raw = await file.read()
     try:
-        text = raw.decode("utf-8")
-    except UnicodeDecodeError:
-        raise HTTPException(status_code=400, detail="File must be UTF-8 text.")
+        text = extract_text(filename, raw)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     if not text.strip():
         raise HTTPException(status_code=400, detail="File is empty.")
     chunks = store.add_document(

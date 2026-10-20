@@ -26,7 +26,10 @@ class Settings:
     chat_model: str = "gpt-4o-mini"
     embedding_model: str = "text-embedding-3-small"
 
-    # Qdrant runs in local embedded mode, persisted under this path.
+    # Qdrant connection. If qdrant_url is set (e.g. http://qdrant:6333 in
+    # Docker Compose), the app talks to a Qdrant server; otherwise it runs
+    # in local embedded mode, persisted under qdrant_path.
+    qdrant_url: str = ""
     qdrant_path: str = "./data/qdrant"
 
     # Retrieval defaults.
@@ -46,6 +49,7 @@ class Settings:
             embedding_model=os.environ.get(
                 "EMBEDDING_MODEL", "text-embedding-3-small"
             ),
+            qdrant_url=os.environ.get("QDRANT_URL", ""),
             qdrant_path=os.environ.get("QDRANT_PATH", "./data/qdrant"),
             top_k=int(os.environ.get("TOP_K", "4")),
         )

@@ -5,8 +5,9 @@ Multi-tenancy model: every tenant gets its own Qdrant collection named
 filtering mistakes can leak documents across tenants) and makes per-tenant
 deletion a single drop-collection call.
 
-Qdrant runs in local embedded mode (path-based storage), so no server or
-Docker is required to run the demo.
+By default Qdrant runs in local embedded mode (path-based storage), so no
+server or Docker is required to run the demo. If ``QDRANT_URL`` is set,
+the store connects to a Qdrant server instead (see docker-compose.yml).
 """
 
 import re
@@ -69,10 +70,17 @@ def chunk_text(text: str, chunk_size: int = 600, overlap: int = 120) -> List[str
 
 
 class RagStore:
-    """Thin wrapper over Qdrant (embedded mode) + an embedder."""
+    """Thin wrapper over Qdrant + an embedder.
 
-    def __init__(self, qdrant_path: str, embedder):
-        self._client = QdrantClient(path=qdrant_path)
+    Connects to a Qdrant server when ``qdrant_url`` is given, otherwise
+    uses local embedded mode persisted at ``qdrant_path``.
+    """
+
+    def __init__(self, embedder, qdrant_url: str = "", qdrant_path: str = ""):
+        if qdrant_url:
+            self._client = QdrantClient(url=qdrant_url)
+        else:
+            self._client = QdrantClient(path=qdrant_path)
         self._embedder = embedder
 
     @property
