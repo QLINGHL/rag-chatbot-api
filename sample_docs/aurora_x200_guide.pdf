@@ -1,0 +1,74 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 994 >>
+stream
+BT
+/F1 18 Tf
+56 716 Td
+(Aurora X200 Drone - Owner Guide) Tj
+0 -34 Td
+/F2 11 Tf
+15 TL
+(Extended Warranty) Tj
+T*
+(The Aurora X200 drone includes an extended warranty of 36 months when the) Tj
+T*
+(product is registered within 14 days of delivery. The warranty covers the) Tj
+T*
+(airframe, the motors, and the flight controller. Damage caused by crashes or) Tj
+T*
+(water immersion is not covered.) Tj
+T*
+T*
+(Battery Care) Tj
+T*
+(The lithium battery of the Aurora X200 should be stored at 60 percent charge) Tj
+T*
+(when it is not used for more than 10 days. A fully charged battery provides up) Tj
+T*
+(to 34 minutes of flight time. Never charge the battery immediately after a) Tj
+T*
+(flight; let it cool down for at least 20 minutes first.) Tj
+T*
+T*
+(Return Policy for Drones) Tj
+T*
+(Drones may be returned within 15 days of delivery if the seal on the box is) Tj
+T*
+(unbroken. Opened drones are accepted only when a manufacturing defect has been) Tj
+T*
+(confirmed by our service team.) Tj
+T*
+T*
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+6 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000251 00000 n 
+0000001296 00000 n 
+0000001371 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+1441
+%%EOF
