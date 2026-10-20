@@ -1,9 +1,10 @@
 # RAG Document Q&A API
 
 A multi-tenant **Retrieval-Augmented Generation (RAG)** service built with
-**FastAPI** and **Qdrant**. Upload text documents for a tenant, then ask
-questions — the API retrieves the most relevant chunks from that tenant's own
-vector collection, builds a grounded prompt, and answers with an LLM.
+**FastAPI** and **Qdrant**. Upload documents (`.txt`, `.md`, or `.pdf`) for a
+tenant, then ask questions — the API retrieves the most relevant chunks from
+that tenant's own vector collection, builds a grounded prompt, and answers
+with an LLM.
 
 Runs in two modes:
 
@@ -15,8 +16,8 @@ Runs in two modes:
 
 ## Features
 
-- 📄 **Document ingestion** — upload `.txt` / `.md` files; automatic
-  paragraph-aware chunking with overlap.
+- 📄 **Document ingestion** — upload `.txt` / `.md` / `.pdf` files (PDF text
+  extracted with `pypdf`); automatic paragraph-aware chunking with overlap.
 - 🏢 **Multi-tenant by design** — every tenant gets a dedicated Qdrant
   collection (`tenant_<id>`), so tenant data is physically isolated and can
   be dropped with one call.
@@ -24,19 +25,24 @@ Runs in two modes:
   attribution (file name, chunk index, score) returned on every answer.
 - 🔌 **Pluggable embeddings** — OpenAI-compatible endpoint, or the built-in
   offline hashing embedder (TF-IDF-style, deterministic).
-- 🗄️ **Zero-infra vector store** — Qdrant in local embedded mode
-  (path-based), no server or Docker needed to run the demo.
-- ✅ **Tested end-to-end** — `test_smoke.py` exercises upload, retrieval,
-  answer assembly and tenant isolation with FastAPI's TestClient.
+- 🗄️ **Flexible vector store** — Qdrant in local embedded mode (path-based)
+  for zero-infra demos, or a Qdrant server when `QDRANT_URL` is set.
+- 🐳 **Docker deployment** — `docker compose up` runs the API plus a Qdrant
+  server, wired together out of the box.
+- ✅ **Tested** — a pytest suite (`tests/`) covers health, upload/retrieval
+  correctness, PDF ingestion, tenant isolation, and input validation — all
+  fully offline. `test_smoke.py` remains as a quick script-style check.
 
 ## Tech Stack
 
 | Layer        | Technology                                  |
 |--------------|---------------------------------------------|
 | API          | FastAPI, Pydantic, Uvicorn                  |
-| Vector store | Qdrant (`qdrant-client`, embedded mode)     |
+| Vector store | Qdrant (`qdrant-client`, embedded or server mode) |
+| PDF parsing  | `pypdf`                                     |
 | Embeddings   | OpenAI-compatible API, or local NumPy hashing embedder |
 | LLM          | Any OpenAI-compatible chat completions API  |
+| Deployment   | Docker + Docker Compose                     |
 | Language     | Python 3.10+                                |
 
 ## Project Structure
@@ -45,18 +51,41 @@ Runs in two modes:
 rag-chatbot-api/
 ├── app/
 │   ├── main.py        # FastAPI app: endpoints, prompt building, answer generation
+│   ├── documents.py   # Text extraction for .txt / .md / .pdf uploads
 │   ├── rag.py         # Chunking + multi-tenant Qdrant store
 │   ├── embeddings.py  # OpenAI embedder + offline hashing embedder
 │   └── config.py      # Env-based settings (with .env support)
 ├── sample_docs/
-│   └── northwind_handbook.txt   # Sample document for the demo
+│   ├── northwind_handbook.txt   # Sample text document
+│   └── aurora_x200_guide.pdf    # Sample PDF document
+├── tests/             # Pytest suite (offline, TestClient-based)
+│   ├── conftest.py
+│   ├── test_api.py
+│   └── test_documents.py
 ├── demo.sh            # curl walkthrough against a running server
-├── test_smoke.py      # Offline end-to-end smoke test
+├── test_smoke.py      # Offline end-to-end smoke test (script form)
+├── Dockerfile
+├── docker-compose.yml # API + Qdrant server, one command
 ├── requirements.txt
 └── .env.example
 ```
 
-## Setup
+## Quickstart with Docker
+
+The fastest way to run the full stack — API plus a real Qdrant server:
+
+```bash
+docker compose up --build
+```
+
+The API is then at <http://localhost:8000> (Swagger UI at `/docs`), and
+Qdrant's dashboard/API at <http://localhost:6333>. Compose sets
+`QDRANT_URL=http://qdrant:6333` for the API, so data persists in Qdrant's
+own volume across restarts. Set `OPENAI_API_KEY` in your shell (or a `.env`
+file) before `up` to enable online mode; without it the stack runs fully
+offline.
+
+## Setup (without Docker)
 
 ```bash
 git clone <this-repo>
@@ -75,16 +104,28 @@ cp .env.example .env             # optional: add your OPENAI_API_KEY
 uvicorn app.main:app --reload --port 8000
 ```
 
-Interactive docs (Swagger UI) are then available at
+Without `QDRANT_URL`, Qdrant runs embedded and stores data under
+`./data/qdrant`. Interactive docs (Swagger UI) are available at
 <http://localhost:8000/docs>.
 
-### Offline smoke test
+## Testing
+
+```bash
+python -m pytest tests/ -q
+```
+
+The suite runs fully offline against a throwaway store and covers: health,
+`.txt` upload → retrieval correctness, tenant isolation, `.pdf` upload →
+retrieval, and rejection of invalid file types / corrupt PDFs / bad tenant
+ids.
+
+A script-style smoke test is also included:
 
 ```bash
 python test_smoke.py
 ```
 
-This spins the app up in-process, uploads the sample handbook, and verifies
+It spins the app up in-process, uploads the sample handbook, and verifies
 that a refund question retrieves the refund chunk and that tenants are
 isolated from each other.
 
@@ -106,12 +147,18 @@ bash demo.sh
 
 ### `POST /tenants/{tenant_id}/documents`
 
-Upload a `.txt` or `.md` file (multipart, field name `file`). The file is
-chunked, embedded, and stored in the tenant's collection.
+Upload a `.txt`, `.md`, or `.pdf` file (multipart, field name `file`). For
+PDFs, text is extracted page by page first; from there the pipeline is the
+same — the file is chunked, embedded, and stored in the tenant's collection.
+Unsupported types, corrupt PDFs, and PDFs with no extractable text are
+rejected with HTTP 400.
 
 ```bash
 curl -X POST http://localhost:8000/tenants/acme/documents \
   -F "file=@sample_docs/northwind_handbook.txt"
+
+curl -X POST http://localhost:8000/tenants/acme/documents \
+  -F "file=@sample_docs/aurora_x200_guide.pdf"
 ```
 
 ```json
@@ -164,7 +211,8 @@ Chunk count for a tenant, and dropping a tenant's whole collection.
 | `OPENAI_BASE_URL` | `https://api.openai.com/v1`  | Any OpenAI-compatible base URL                |
 | `CHAT_MODEL`      | `gpt-4o-mini`                | Chat model for answers                        |
 | `EMBEDDING_MODEL` | `text-embedding-3-small`     | Embedding model (online mode)                 |
-| `QDRANT_PATH`     | `./data/qdrant`              | Local Qdrant storage path                     |
+| `QDRANT_URL`      | *(empty = embedded mode)*    | Qdrant server URL, e.g. `http://qdrant:6333`  |
+| `QDRANT_PATH`     | `./data/qdrant`              | Local Qdrant storage path (embedded mode)     |
 | `TOP_K`           | `4`                          | Chunks retrieved per question                 |
 
 > Note: a tenant's collection is created with the vector size of the
@@ -173,12 +221,15 @@ Chunk count for a tenant, and dropping a tenant's whole collection.
 
 ## Production Notes
 
-- Swap embedded Qdrant for a Qdrant server/cluster by constructing
-  `QdrantClient(url=...)` — the rest of the code is unchanged.
+- For anything beyond a demo, run Qdrant as a server: set `QDRANT_URL`
+  (the included `docker-compose.yml` does this) or point it at a Qdrant
+  Cloud cluster — no code changes needed.
 - Add auth (API keys / JWT) in front of the tenant endpoints and validate
   tenant ownership before serving requests.
 - The offline hashing embedder is a demo/testing tool; use a real embedding
   model for production retrieval quality.
+- Scanned/image-only PDFs have no embedded text and are rejected; add an
+  OCR step (e.g. Tesseract) in front of ingestion if you need them.
 
 ## License
 
