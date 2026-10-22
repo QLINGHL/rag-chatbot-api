@@ -15,7 +15,14 @@ import uuid
 from typing import Dict, List
 
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, PointStruct, VectorParams
+from qdrant_client.models import (
+    Distance,
+    FieldCondition,
+    Filter,
+    MatchValue,
+    PointStruct,
+    VectorParams,
+)
 
 _TENANT_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
@@ -143,6 +150,46 @@ class RagStore:
         name = self.ensure_collection(tenant_id)
         info = self._client.get_collection(name)
         return int(info.points_count or 0)
+
+    def list_documents(self, tenant_id: str) -> List[Dict]:
+        """List documents uploaded to a tenant, aggregated from chunk payloads.
+
+        No separate registry is kept: each point's payload carries its
+        ``source`` filename, so the listing works retroactively for
+        documents indexed before this endpoint existed.
+        """
+        name = self.ensure_collection(tenant_id)
+        docs: Dict[str, Dict] = {}
+        offset = None
+        while True:
+            records, offset = self._client.scroll(
+                collection_name=name,
+                limit=1000,
+                offset=offset,
+                with_payload=["source"],
+                with_vectors=False,
+            )
+            for record in records:
+                source = (record.payload or {}).get("source")
+                if source is None:
+                    continue
+                entry = docs.setdefault(source, {"document": source, "chunks": 0})
+                entry["chunks"] += 1
+            if offset is None:
+                break
+        return sorted(docs.values(), key=lambda d: d["document"])
+
+    def delete_document(self, tenant_id: str, filename: str) -> int:
+        """Delete every chunk of one document; returns the number removed."""
+        name = self.ensure_collection(tenant_id)
+        flt = Filter(
+            must=[FieldCondition(key="source", match=MatchValue(value=filename))]
+        )
+        result = self._client.count(collection_name=name, count_filter=flt)
+        removed = int(result.count or 0)
+        if removed:
+            self._client.delete(collection_name=name, points_selector=flt)
+        return removed
 
     def drop_tenant(self, tenant_id: str) -> None:
         name = collection_name(tenant_id)

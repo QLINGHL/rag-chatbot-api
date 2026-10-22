@@ -30,8 +30,9 @@ Runs in two modes:
 - 🐳 **Docker deployment** — `docker compose up` runs the API plus a Qdrant
   server, wired together out of the box.
 - ✅ **Tested** — a pytest suite (`tests/`) covers health, upload/retrieval
-  correctness, PDF ingestion, tenant isolation, and input validation — all
-  fully offline. `test_smoke.py` remains as a quick script-style check.
+  correctness, PDF ingestion, per-document management (list + delete),
+  tenant isolation, and input validation — all fully offline.
+  `test_smoke.py` remains as a quick script-style check.
 
 ## Tech Stack
 
@@ -198,6 +199,13 @@ curl -X POST http://localhost:8000/tenants/acme/chat \
 `mode` is `llm` when a chat API key is configured, and
 `extractive-fallback` in offline mode. `sources` always shows exactly which
 chunks grounded the answer.
+
+### `GET /tenants/{tenant_id}/documents` · `DELETE /tenants/{tenant_id}/documents/{filename}`
+
+List the documents a tenant has indexed (each entry: filename + chunk
+count — aggregated from chunk payloads, no separate registry), and remove
+a single document's chunks. Deleting a missing document returns 404;
+path-traversal style names (`/`, `..`, `\`) are rejected with 400.
 
 ### `GET /tenants/{tenant_id}/stats` · `DELETE /tenants/{tenant_id}`
 

@@ -7,6 +7,10 @@ Multi-tenant retrieval-augmented generation over uploaded text documents:
   Qdrant collection.
 * POST /tenants/{tenant_id}/chat      - ask a question; the top-k chunks from
   the tenant's collection are retrieved and used to build the LLM prompt.
+* GET  /tenants/{tenant_id}/documents - list the documents the tenant has
+  indexed (filename + chunk count each).
+* DELETE /tenants/{tenant_id}/documents/{filename} - remove one document's
+  chunks; 404 when the tenant has no document by that name.
 * GET  /tenants/{tenant_id}/stats     - chunk count for a tenant.
 * DELETE /tenants/{tenant_id}         - drop a tenant's collection.
 * GET  /health                        - liveness + active embedding mode.
@@ -151,6 +155,39 @@ def chat(tenant_id: str, req: ChatRequest):
         "answer": answer,
         "mode": mode,
         "sources": contexts,
+    }
+
+
+@app.get("/tenants/{tenant_id}/documents")
+def list_documents(tenant_id: str):
+    try:
+        validate_tenant_id(tenant_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {
+        "tenant_id": tenant_id,
+        "documents": store.list_documents(tenant_id),
+    }
+
+
+@app.delete("/tenants/{tenant_id}/documents/{filename:path}")
+def delete_document(tenant_id: str, filename: str):
+    try:
+        validate_tenant_id(tenant_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    if not filename or "/" in filename or "\\" in filename or ".." in filename:
+        raise HTTPException(status_code=400, detail="Invalid document name.")
+    removed = store.delete_document(tenant_id, filename)
+    if removed == 0:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Document {filename!r} not found for this tenant.",
+        )
+    return {
+        "tenant_id": tenant_id,
+        "document": filename,
+        "chunks_deleted": removed,
     }
 
 
