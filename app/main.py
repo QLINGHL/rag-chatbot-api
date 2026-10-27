@@ -21,7 +21,7 @@ hashing embeddings and an extractive answer built from the top chunk.
 """
 
 import httpx
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
 
 from .config import settings
@@ -109,11 +109,32 @@ def health():
 
 
 @app.post("/tenants/{tenant_id}/documents")
-async def upload_document(tenant_id: str, file: UploadFile = File(...)):
+async def upload_document(
+    tenant_id: str,
+    file: UploadFile = File(...),
+    chunk_size: int = Query(
+        default=settings.chunk_size,
+        ge=1,
+        le=10000,
+        description="Max characters per chunk; defaults to CHUNK_SIZE.",
+    ),
+    chunk_overlap: int = Query(
+        default=settings.chunk_overlap,
+        ge=0,
+        le=9999,
+        description="Characters shared between consecutive chunks of an "
+        "oversized paragraph; must be smaller than chunk_size.",
+    ),
+):
     try:
         validate_tenant_id(tenant_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    if chunk_overlap >= chunk_size:
+        raise HTTPException(
+            status_code=400,
+            detail="chunk_overlap must be smaller than chunk_size.",
+        )
     filename = file.filename or ""
     if not is_supported(filename):
         raise HTTPException(
@@ -130,14 +151,16 @@ async def upload_document(tenant_id: str, file: UploadFile = File(...)):
         tenant_id=tenant_id,
         source=filename,
         text=text,
-        chunk_size=settings.chunk_size,
-        overlap=settings.chunk_overlap,
+        chunk_size=chunk_size,
+        overlap=chunk_overlap,
     )
     return {
         "tenant_id": tenant_id,
         "document": filename,
         "chunks_stored": chunks,
         "total_chunks": store.count(tenant_id),
+        "chunk_size": chunk_size,
+        "chunk_overlap": chunk_overlap,
     }
 
 

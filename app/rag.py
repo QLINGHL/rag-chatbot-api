@@ -44,7 +44,16 @@ def chunk_text(text: str, chunk_size: int = 600, overlap: int = 120) -> List[str
 
     Paragraphs are kept together where possible; oversized paragraphs are
     windowed with overlap so facts near a boundary still appear in a chunk.
+
+    Raises ``ValueError`` for invalid windows: ``chunk_size`` must be at
+    least 1 and ``overlap`` must satisfy ``0 <= overlap < chunk_size``
+    (an overlap at or above the window size would never advance and
+    would loop forever on an oversized paragraph).
     """
+    if chunk_size < 1:
+        raise ValueError("chunk_size must be at least 1.")
+    if not 0 <= overlap < chunk_size:
+        raise ValueError("overlap must satisfy 0 <= overlap < chunk_size.")
     text = text.replace("\r\n", "\n").strip()
     if not text:
         return []

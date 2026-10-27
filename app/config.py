@@ -52,6 +52,8 @@ class Settings:
             qdrant_url=os.environ.get("QDRANT_URL", ""),
             qdrant_path=os.environ.get("QDRANT_PATH", "./data/qdrant"),
             top_k=int(os.environ.get("TOP_K", "4")),
+            chunk_size=int(os.environ.get("CHUNK_SIZE", "600")),
+            chunk_overlap=int(os.environ.get("CHUNK_OVERLAP", "120")),
         )
 
 

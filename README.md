@@ -154,6 +154,13 @@ same — the file is chunked, embedded, and stored in the tenant's collection.
 Unsupported types, corrupt PDFs, and PDFs with no extractable text are
 rejected with HTTP 400.
 
+Chunking is configurable per upload with the `chunk_size` and
+`chunk_overlap` query parameters (defaults `600` / `120`, also settable
+via the `CHUNK_SIZE` / `CHUNK_OVERLAP` environment variables);
+`chunk_overlap` must be smaller than `chunk_size`, and the response echoes
+the values actually used. Overlap only applies when a single paragraph is
+longer than `chunk_size` — short paragraphs are packed whole.
+
 ```bash
 curl -X POST http://localhost:8000/tenants/acme/documents \
   -F "file=@sample_docs/northwind_handbook.txt"
