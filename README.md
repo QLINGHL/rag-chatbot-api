@@ -59,6 +59,7 @@ rag-chatbot-api/
 ├── sample_docs/
 │   ├── northwind_handbook.txt   # Sample text document
 │   └── aurora_x200_guide.pdf    # Sample PDF document
+├── eval/                # Offline retrieval benchmark (qa_set.json + evaluate.py)
 ├── tests/             # Pytest suite (offline, TestClient-based)
 │   ├── conftest.py
 │   ├── test_api.py
@@ -129,6 +130,22 @@ python test_smoke.py
 It spins the app up in-process, uploads the sample handbook, and verifies
 that a refund question retrieves the refund chunk and that tenants are
 isolated from each other.
+
+### Evaluation (offline retrieval)
+
+`eval/` holds a small retrieval benchmark: 12 questions grounded in the
+sample handbook, each with the answer phrase its chunk must contain.
+
+```bash
+python eval/evaluate.py
+python eval/evaluate.py --top-k 2 --output eval/results.json
+```
+
+It uploads the sample document, asks every question through the real
+`/chat` endpoint, and reports chunk-level hit@1, hit@k and MRR. Baseline
+with the offline hashing embedder (2026-11-01): 12 questions, hit@1 0.92,
+hit@4 1.00, MRR 0.958 — only the password question ranked 2nd, the rest
+ranked 1st. The report file is a run artifact and is not committed.
 
 ### Demo with curl
 
