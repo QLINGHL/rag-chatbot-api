@@ -24,6 +24,8 @@ from qdrant_client.models import (
     VectorParams,
 )
 
+from .hybrid import bm25_scores, rrf_fuse, tokenize
+
 _TENANT_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 
@@ -133,20 +135,20 @@ class RagStore:
         self._client.upsert(collection_name=name, points=points)
         return len(points)
 
-    def search(self, tenant_id: str, query: str, top_k: int) -> List[Dict]:
-        name = self.ensure_collection(tenant_id)
-        vector = self._embedder.embed([query])[0]
+    def _vector_search(self, name: str, vector, limit: int) -> List[Dict]:
+        """Vector search; returns hits with their Qdrant point id attached."""
         try:  # qdrant-client >= 1.10
             result = self._client.query_points(
-                collection_name=name, query=vector.tolist(), limit=top_k
+                collection_name=name, query=vector, limit=limit
             )
             hits = result.points
         except AttributeError:  # older clients
             hits = self._client.search(
-                collection_name=name, query_vector=vector.tolist(), limit=top_k
+                collection_name=name, query_vector=vector, limit=limit
             )
         return [
             {
+                "id": str(hit.id),
                 "text": hit.payload.get("text", ""),
                 "source": hit.payload.get("source"),
                 "chunk_index": hit.payload.get("chunk_index"),
@@ -154,6 +156,93 @@ class RagStore:
             }
             for hit in hits
         ]
+
+    def _scroll_corpus(self, name: str) -> List[Dict]:
+        """All chunks of a collection (id + payload), for BM25 scoring."""
+        corpus: List[Dict] = []
+        offset = None
+        while True:
+            records, offset = self._client.scroll(
+                collection_name=name,
+                limit=1000,
+                offset=offset,
+                with_payload=True,
+                with_vectors=False,
+            )
+            for record in records:
+                payload = record.payload or {}
+                corpus.append(
+                    {
+                        "id": str(record.id),
+                        "text": payload.get("text", ""),
+                        "source": payload.get("source"),
+                        "chunk_index": payload.get("chunk_index"),
+                    }
+                )
+            if offset is None:
+                break
+        return corpus
+
+    def search(
+        self, tenant_id: str, query: str, top_k: int, hybrid: bool = False
+    ) -> List[Dict]:
+        """Retrieve the top-k chunks for a query.
+
+        Vector-only by default (Qdrant cosine search). With ``hybrid=True``,
+        BM25 keyword scores over the tenant's whole chunk corpus are fused
+        with the vector ranking via Reciprocal Rank Fusion (K=60, same as
+        eaap-agent-platform), so an exact-keyword match can surface a chunk
+        the vector ranking missed. Hybrid hits additionally carry
+        ``vector_score`` / ``bm25_score`` (``None`` when a chunk only
+        ranked on the other side).
+        """
+        name = self.ensure_collection(tenant_id)
+        vector = self._embedder.embed([query])[0].tolist()
+        if not hybrid:
+            return [
+                {k: v for k, v in hit.items() if k != "id"}
+                for hit in self._vector_search(name, vector, top_k)
+            ]
+
+        # Candidate pool wider than top_k: fusion needs both rankings to
+        # see chunks the other side would have cut off.
+        candidate_limit = max(top_k * 2, 20)
+        vec_hits = self._vector_search(name, vector, candidate_limit)
+        corpus = self._scroll_corpus(name)
+        bm25 = bm25_scores(tokenize(query), corpus)
+        bm25_ranked = [
+            cid for cid, _ in sorted(bm25.items(), key=lambda kv: -kv[1])
+        ]
+        fused = rrf_fuse(
+            [hit["id"] for hit in vec_hits], bm25_ranked, top_k=top_k
+        )
+        by_id = {hit["id"]: hit for hit in vec_hits}
+        by_id.update(
+            {doc["id"]: doc for doc in corpus if doc["id"] not in by_id}
+        )
+        vec_scores = {hit["id"]: hit["score"] for hit in vec_hits}
+        out = []
+        for entry in fused:
+            hit = by_id[entry["id"]]
+            out.append(
+                {
+                    "text": hit["text"],
+                    "source": hit.get("source"),
+                    "chunk_index": hit.get("chunk_index"),
+                    "score": round(entry["score"], 6),
+                    "vector_score": (
+                        round(vec_scores[entry["id"]], 6)
+                        if entry["id"] in vec_scores
+                        else None
+                    ),
+                    "bm25_score": (
+                        round(bm25[entry["id"]], 4)
+                        if entry["id"] in bm25
+                        else None
+                    ),
+                }
+            )
+        return out
 
     def count(self, tenant_id: str) -> int:
         name = self.ensure_collection(tenant_id)

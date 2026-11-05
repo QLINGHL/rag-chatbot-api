@@ -4,6 +4,7 @@ Usage (fully offline, no API key needed)::
 
     python eval/evaluate.py
     python eval/evaluate.py --top-k 2 --output eval/results.json
+    python eval/evaluate.py --hybrid --output eval/results-hybrid.json
 
 What it measures
 -----------------
@@ -91,7 +92,7 @@ def score_results(per_question, top_k):
     }
 
 
-def run_evaluation(client, qa_set, document_path, top_k=4):
+def run_evaluation(client, qa_set, document_path, top_k=4, hybrid=False):
     """Upload ``document_path`` for a fresh tenant, ask every question,
     and return ``{"summary": ..., "results": [...]}``."""
     if top_k < 1:
@@ -111,7 +112,7 @@ def run_evaluation(client, qa_set, document_path, top_k=4):
     for entry in qa_set:
         chat = client.post(
             f"/tenants/{tenant}/chat",
-            json={"question": entry["question"], "top_k": top_k},
+            json={"question": entry["question"], "top_k": top_k, "hybrid": hybrid},
         )
         if chat.status_code != 200:
             results.append({**entry, "rank": None, "error": chat.text})
@@ -136,6 +137,8 @@ def main(argv=None):
     parser.add_argument("--qa-set", default=DEFAULT_QA_SET)
     parser.add_argument("--document", default=DEFAULT_DOCUMENT)
     parser.add_argument("--top-k", type=int, default=4)
+    parser.add_argument("--hybrid", action="store_true",
+                        help="Ask with hybrid (vector + BM25, RRF) retrieval.")
     parser.add_argument("--output", default=None, help="Write the full JSON report here.")
     args = parser.parse_args(argv)
 
@@ -156,13 +159,17 @@ def main(argv=None):
     from app.main import app
 
     health = TestClient(app).get("/health").json()
-    report = run_evaluation(TestClient(app), qa_set, args.document, top_k=args.top_k)
+    report = run_evaluation(
+        TestClient(app), qa_set, args.document, top_k=args.top_k, hybrid=args.hybrid
+    )
     report["top_k"] = args.top_k
+    report["hybrid"] = args.hybrid
     report["embedder"] = health.get("embedder")
     report["document"] = os.path.basename(args.document)
 
     summary = report["summary"]
-    print(f"document: {report['document']}  embedder: {report['embedder']}  top_k: {args.top_k}")
+    print(f"document: {report['document']}  embedder: {report['embedder']}  "
+          f"top_k: {args.top_k}  hybrid: {args.hybrid}")
     print(f"questions: {summary['total']}  hit@1: {summary['hit@1']:.2f}  "
           f"hit@{args.top_k}: {summary['hit@k']:.2f}  mrr: {summary['mrr']:.3f}  "
           f"misses: {summary['misses']}")

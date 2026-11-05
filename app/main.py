@@ -21,6 +21,8 @@ hashing embeddings and an extractive answer built from the top chunk.
 """
 
 import httpx
+from typing import Optional
+
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
 
@@ -45,6 +47,10 @@ store = RagStore(
 class ChatRequest(BaseModel):
     question: str = Field(..., min_length=1)
     top_k: int = Field(default=settings.top_k, ge=1, le=20)
+    # None = fall back to the HYBRID_RETRIEVAL setting; True/False override
+    # it for this request. Hybrid fuses vector search with BM25 keyword
+    # search (RRF), which helps exact-term questions vector search misses.
+    hybrid: Optional[bool] = None
 
 
 def build_prompt(question: str, contexts) -> tuple:
@@ -105,6 +111,7 @@ def health():
         "embedder": store.embedder_name,
         "llm_configured": bool(settings.openai_api_key),
         "chat_model": settings.chat_model if settings.openai_api_key else None,
+        "hybrid_retrieval": settings.hybrid_retrieval,
     }
 
 
@@ -170,13 +177,15 @@ def chat(tenant_id: str, req: ChatRequest):
         validate_tenant_id(tenant_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    contexts = store.search(tenant_id, req.question, req.top_k)
+    hybrid = settings.hybrid_retrieval if req.hybrid is None else req.hybrid
+    contexts = store.search(tenant_id, req.question, req.top_k, hybrid=hybrid)
     answer, mode = generate_answer(req.question, contexts)
     return {
         "tenant_id": tenant_id,
         "question": req.question,
         "answer": answer,
         "mode": mode,
+        "retrieval": "hybrid" if hybrid else "vector",
         "sources": contexts,
     }
 

@@ -36,6 +36,10 @@ class Settings:
     top_k: int = 4
     chunk_size: int = 600
     chunk_overlap: int = 120
+    # Hybrid retrieval: fuse Qdrant vector search with BM25 keyword search
+    # via Reciprocal Rank Fusion (same scheme as eaap-agent-platform).
+    # Off by default; can also be enabled per chat request.
+    hybrid_retrieval: bool = False
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -54,6 +58,8 @@ class Settings:
             top_k=int(os.environ.get("TOP_K", "4")),
             chunk_size=int(os.environ.get("CHUNK_SIZE", "600")),
             chunk_overlap=int(os.environ.get("CHUNK_OVERLAP", "120")),
+            hybrid_retrieval=os.environ.get("HYBRID_RETRIEVAL", "").lower()
+            in ("1", "true", "yes"),
         )
 
 

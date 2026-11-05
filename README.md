@@ -23,6 +23,13 @@ Runs in two modes:
   be dropped with one call.
 - 🔎 **Semantic retrieval** — top-k cosine search per tenant, with source
   attribution (file name, chunk index, score) returned on every answer.
+- 🔀 **Hybrid retrieval (optional)** — BM25 keyword search fused with the
+  vector ranking via Reciprocal Rank Fusion (K=60), the same scheme as
+  eaap-agent-platform's knowledge base. Enable per request with
+  `"hybrid": true` on `/chat`, or globally with `HYBRID_RETRIEVAL=1`.
+  Hybrid hits also report `vector_score` / `bm25_score`. On the sample
+  handbook benchmark it lifts hit@1 from 0.92 to 1.00 (see
+  `eval/evaluate.py --hybrid`).
 - 🔌 **Pluggable embeddings** — OpenAI-compatible endpoint, or the built-in
   offline hashing embedder (TF-IDF-style, deterministic).
 - 🗄️ **Flexible vector store** — Qdrant in local embedded mode (path-based)
@@ -31,7 +38,8 @@ Runs in two modes:
   server, wired together out of the box.
 - ✅ **Tested** — a pytest suite (`tests/`) covers health, upload/retrieval
   correctness, PDF ingestion, per-document management (list + delete),
-  tenant isolation, and input validation — all fully offline.
+  tenant isolation, hybrid retrieval (BM25 + RRF) and input validation —
+  all fully offline.
   `test_smoke.py` remains as a quick script-style check.
 
 ## Tech Stack
@@ -54,6 +62,7 @@ rag-chatbot-api/
 │   ├── main.py        # FastAPI app: endpoints, prompt building, answer generation
 │   ├── documents.py   # Text extraction for .txt / .md / .pdf uploads
 │   ├── rag.py         # Chunking + multi-tenant Qdrant store
+│   ├── hybrid.py      # BM25 keyword scoring + RRF fusion (mirrors EAAP)
 │   ├── embeddings.py  # OpenAI embedder + offline hashing embedder
 │   └── config.py      # Env-based settings (with .env support)
 ├── sample_docs/
@@ -139,13 +148,16 @@ sample handbook, each with the answer phrase its chunk must contain.
 ```bash
 python eval/evaluate.py
 python eval/evaluate.py --top-k 2 --output eval/results.json
+python eval/evaluate.py --hybrid --output eval/results-hybrid.json
 ```
 
 It uploads the sample document, asks every question through the real
 `/chat` endpoint, and reports chunk-level hit@1, hit@k and MRR. Baseline
 with the offline hashing embedder (2026-11-01): 12 questions, hit@1 0.92,
 hit@4 1.00, MRR 0.958 — only the password question ranked 2nd, the rest
-ranked 1st. The report file is a run artifact and is not committed.
+ranked 1st. With `--hybrid` (2026-11-05): hit@1 1.00, hit@4 1.00,
+MRR 1.000 — the password question now ranks 1st. The report file is a run
+artifact and is not committed.
 
 ### Demo with curl
 
@@ -222,7 +234,10 @@ curl -X POST http://localhost:8000/tenants/acme/chat \
 
 `mode` is `llm` when a chat API key is configured, and
 `extractive-fallback` in offline mode. `sources` always shows exactly which
-chunks grounded the answer.
+chunks grounded the answer. `retrieval` is `vector` by default, or `hybrid`
+when hybrid retrieval is on for the request; hybrid hits additionally carry
+`vector_score` and `bm25_score` (either may be `null` when the chunk only
+ranked on the other side).
 
 ### `GET /tenants/{tenant_id}/documents` · `DELETE /tenants/{tenant_id}/documents/{filename}`
 
@@ -246,6 +261,7 @@ Chunk count for a tenant, and dropping a tenant's whole collection.
 | `QDRANT_URL`      | *(empty = embedded mode)*    | Qdrant server URL, e.g. `http://qdrant:6333`  |
 | `QDRANT_PATH`     | `./data/qdrant`              | Local Qdrant storage path (embedded mode)     |
 | `TOP_K`           | `4`                          | Chunks retrieved per question                 |
+| `HYBRID_RETRIEVAL`| *(empty = off)*              | `1`/`true` enables hybrid (vector + BM25, RRF) retrieval by default; per-request `"hybrid"` overrides it |
 
 > Note: a tenant's collection is created with the vector size of the
 > embedder active at first upload. If you switch embedders (e.g. from the
