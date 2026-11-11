@@ -1,5 +1,7 @@
 # RAG Document Q&A API
 
+[![CI](https://github.com/QLINGHL/rag-chatbot-api/actions/workflows/ci.yml/badge.svg)](https://github.com/QLINGHL/rag-chatbot-api/actions/workflows/ci.yml)
+
 A multi-tenant **Retrieval-Augmented Generation (RAG)** service built with
 **FastAPI** and **Qdrant**. Upload documents (`.txt`, `.md`, or `.pdf`) for a
 tenant, then ask questions — the API retrieves the most relevant chunks from
